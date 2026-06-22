@@ -1,0 +1,30 @@
+application:
+  name: inventree
+  pods:
+  - name: app
+    image: inventree/inventree:latest
+    path: /
+    servicePorts:
+    - 8000
+    vars:
+      INVENTREE_DB_ENGINE: postgresql
+      INVENTREE_DB_NAME: inventree
+      INVENTREE_DB_USER: inventree
+      INVENTREE_DB_PASSWORD: inventree
+      INVENTREE_DB_HOST: postgres.pod
+    volumes:
+    - name: inventree-data
+      mountPath: /home/inventree/data
+      size: 10Gi
+  - name: postgres
+    image: postgres:16-alpine
+    servicePorts:
+    - 5432
+    vars:
+      POSTGRES_DB: inventree
+      POSTGRES_USER: inventree
+      POSTGRES_PASSWORD: inventree
+    volumes:
+    - name: inventree-db
+      mountPath: /var/lib/postgresql/data
+      size: 10Gi
