@@ -6,7 +6,6 @@ application:
     path: /
     servicePorts:
     - 8000
-    command: sh -c "invoke wait && invoke update && exec gunicorn -c ./gunicorn.conf.py InvenTree.wsgi -b 0.0.0.0:8000 --chdir ${INVENTREE_BACKEND_DIR}/InvenTree"
     vars:
       INVENTREE_DB_ENGINE: postgresql
       INVENTREE_DB_NAME: inventree
