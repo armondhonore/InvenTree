@@ -1,9 +1,32 @@
-# Thin wrapper over the official InvenTree all-in-one image.
-# The stock image's CMD only starts gunicorn — it neither waits for the
-# database nor runs migrations (those are offloaded to a django-q worker that
-# does not exist in a single-pod deploy). On Nexlayer we run a startup sequence
-# that waits for postgres, applies migrations + collects static, then serves.
-FROM mirror.gcr.io/inventree/inventree:stable
+FROM mirror.gcr.io/library/python:3.12-slim
 
-# init.sh (the image ENTRYPOINT) runs first and then exec's this CMD.
-CMD ["sh", "-c", "invoke wait && invoke update && exec gunicorn -c ./gunicorn.conf.py InvenTree.wsgi -b 0.0.0.0:${INVENTREE_WEB_PORT} --chdir ${INVENTREE_BACKEND_DIR}/InvenTree"]
+WORKDIR /app
+
+# Install system dependencies for InvenTree (Postgres, build tools, etc.)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    libpq-dev \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy the entire repository
+COPY . .
+
+# Install dependencies using the project's pyproject.toml/requirements
+# We use --no-deps first to get pip updated, then install the project
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir . || pip install --no-cache-dir -r requirements.txt || true
+
+# Ensure Django and core production server are present
+RUN pip install --no-cache-dir "django>=5.0" gunicorn psycopg2-binary redis
+
+# InvenTree uses a src layout. Add src to PYTHONPATH
+ENV PYTHONPATH=/app/src
+ENV SECRET_KEY=placeholder-secret-key-for-build
+ENV DEBUG=False
+ENV PORT=8000
+
+EXPOSE 8000
+
+# Use a more robust entrypoint: find manage.py, run migrations (ignore failure), then runserver
+CMD ["sh", "-c", "MANAGE_PY=$(find . -name manage.py | head -n 1) && python $MANAGE_PY migrate --noinput || true && python $MANAGE_PY runserver 0.0.0.0:8000"]

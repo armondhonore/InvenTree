@@ -2,14 +2,14 @@
 
 **Live:** [https://relaxed-weasel-inventree.cloud.nexlayer.ai](https://relaxed-weasel-inventree.cloud.nexlayer.ai)  
 
-**Runtime:**  · **Port:** auto-detected · **Deploy branch:** master
+**Runtime:**  · **Port:** auto-detected · **Deploy branch:** nexlayer
 
 ---
 
 ## How this deployment works
 
 **inventree** is deployed on [Nexlayer](https://nexlayer.ai) — a container-native
-platform where every push to `master` triggers a fully automated build-and-deploy
+platform where every push to `nexlayer` triggers a fully automated build-and-deploy
 pipeline with no infrastructure management required:
 
 1. **AI analysis** — the Nexlayer agent reads your repo, understands your runtime,
@@ -38,33 +38,36 @@ The agent generates this; you can edit it freely.
 application:
   name: inventree
   pods:
-  - name: app
-    image: mirror.gcr.io/inventree/inventree:latest
-    path: /
-    servicePorts:
-    - 8000
-    vars:
-      INVENTREE_DB_ENGINE: postgresql
-      INVENTREE_DB_NAME: inventree
-      INVENTREE_DB_USER: inventree
-      INVENTREE_DB_PASSWORD: inventree
-      INVENTREE_DB_HOST: postgres.pod
-    volumes:
-    - name: inventree-data
-      mountPath: /home/inventree/data
-      size: 10Gi
-  - name: postgres
-    image: mirror.gcr.io/library/postgres:16-alpine
-    servicePorts:
-    - 5432
-    vars:
-      POSTGRES_DB: inventree
-      POSTGRES_USER: inventree
-      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
-    volumes:
-    - name: inventree-db
-      mountPath: /var/lib/postgresql/data
-      size: 10Gi
+    - name: web
+      image: "registry.nexlayer.io/user_01kece1xyh817dwff7wnarhkxd/inventree:9f15757-fix8"
+      path: /
+      port: 8000
+      servicePorts:
+        - 8000
+      env:
+        - name: DATABASE_URL
+          value: postgresql://inventree:password@${postgres:5432}/inventree
+        - name: REDIS_URL
+          value: redis://${redis:6379}
+    - name: postgres
+      image: mirror.gcr.io/library/postgres:16-alpine
+      path: /postgres
+      port: 5432
+      servicePorts:
+        - 5432
+      env:
+        - name: POSTGRES_USER
+          value: inventree
+        - name: POSTGRES_PASSWORD
+          value: password
+        - name: POSTGRES_DB
+          value: inventree
+    - name: redis
+      image: mirror.gcr.io/library/redis:7-alpine
+      path: /redis
+      port: 6379
+      servicePorts:
+        - 6379
 ```
 
 **Common edits:**
@@ -86,7 +89,7 @@ only regenerates it if you delete it or on the very first deploy.
 ### `.github/workflows/nexlayer.yml` — CI/CD
 
 Triggers on:
-- **Push** to `master` → production redeploy
+- **Push** to `nexlayer` → production redeploy
 - **Pull request** → preview deploy with a unique URL posted as a PR comment
 - **Manual** → run on demand from the Actions tab (no commit required)
 
@@ -103,7 +106,7 @@ include this context in your prompt:
 > *"This project is deployed on Nexlayer. The deployment manifest is `nexlayer.yaml`.
 > The container exposes port auto-detected. When adding a new service (database, cache,
 > worker), add it as a new pod in `nexlayer.yaml` and reference it with
-> `<podName>.pod:<port>` syntax. CI/CD runs on push to `master`."*
+> `<podName>.pod:<port>` syntax. CI/CD runs on push to `nexlayer`."*
 
 The `nexlayer.skills` file in this repo gives agents structured guidance on the
 Nexlayer platform, including schema reference, common patterns, and anti-patterns.
