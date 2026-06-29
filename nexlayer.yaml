@@ -21,7 +21,7 @@ application:
       INVENTREE_ADMIN_EMAIL: admin@example.com
       INVENTREE_GUNICORN_TIMEOUT: "300"
     volumes:
-    - name: inventree-data
+    - name: inventree-data-v2
       mountPath: /home/inventree/data
       size: 10Gi
   - name: inventree-postgres
@@ -34,6 +34,6 @@ application:
       POSTGRES_PASSWORD: inventree
       PGDATA: /var/lib/postgresql/data/pgdata
     volumes:
-    - name: inventree-db
+    - name: inventree-db-v2
       mountPath: /var/lib/postgresql
       size: 10Gi
