@@ -19,6 +19,7 @@ application:
       INVENTREE_ADMIN_USER: admin
       INVENTREE_ADMIN_PASSWORD: inventree
       INVENTREE_ADMIN_EMAIL: admin@example.com
+      INVENTREE_GUNICORN_TIMEOUT: "300"
     volumes:
     - name: inventree-data
       mountPath: /home/inventree/data
