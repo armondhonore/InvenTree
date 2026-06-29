@@ -2,7 +2,7 @@ application:
   name: inventree
   pods:
   - name: app
-    image: mirror.gcr.io/inventree/inventree:latest
+    image: mirror.gcr.io/inventree/inventree:stable
     path: /
     servicePorts:
     - 8000
@@ -11,12 +11,19 @@ application:
       INVENTREE_DB_NAME: inventree
       INVENTREE_DB_USER: inventree
       INVENTREE_DB_PASSWORD: inventree
-      INVENTREE_DB_HOST: postgres.pod
+      INVENTREE_DB_HOST: inventree-postgres.pod
+      INVENTREE_DB_PORT: "5432"
+      INVENTREE_AUTO_UPDATE: "True"
+      INVENTREE_SITE_URL: https://relaxed-weasel-inventree.cloud.nexlayer.ai
+      INVENTREE_TRUSTED_ORIGINS: https://relaxed-weasel-inventree.cloud.nexlayer.ai
+      INVENTREE_ADMIN_USER: admin
+      INVENTREE_ADMIN_PASSWORD: inventree
+      INVENTREE_ADMIN_EMAIL: admin@example.com
     volumes:
     - name: inventree-data
       mountPath: /home/inventree/data
       size: 10Gi
-  - name: postgres
+  - name: inventree-postgres
     image: mirror.gcr.io/library/postgres:16-alpine
     servicePorts:
     - 5432
@@ -24,7 +31,8 @@ application:
       POSTGRES_DB: inventree
       POSTGRES_USER: inventree
       POSTGRES_PASSWORD: inventree
+      PGDATA: /var/lib/postgresql/data/pgdata
     volumes:
     - name: inventree-db
-      mountPath: /var/lib/postgresql/data
+      mountPath: /var/lib/postgresql
       size: 10Gi
