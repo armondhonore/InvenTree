@@ -2,7 +2,7 @@ application:
   name: inventree
   pods:
   - name: app
-    image: inventree/inventree:latest
+    image: mirror.gcr.io/inventree/inventree:latest
     path: /
     servicePorts:
     - 8000
@@ -17,7 +17,7 @@ application:
       mountPath: /home/inventree/data
       size: 10Gi
   - name: postgres
-    image: postgres:16-alpine
+    image: mirror.gcr.io/library/postgres:16-alpine
     servicePorts:
     - 5432
     vars:
