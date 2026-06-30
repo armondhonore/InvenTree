@@ -2,25 +2,20 @@
 
 Root cause (confirmed from container logs): the pipeline built InvenTree FROM
 SOURCE (python:3.12-slim + pip) and that image was broken —
-`ModuleNotFoundError: No module named 'django'` at /app/src/backend/InvenTree/manage.py.
-Building from source is unnecessary; the official `inventree/inventree` image is
-complete.
+`ModuleNotFoundError: No module named 'django'`. Building from source is
+unnecessary; the official `inventree/inventree` image is complete. Separately,
+the multi-pod postgres topology kept tripping the deploy step.
 
-Facts that must hold (verified in InvenTree source):
-- In production the server `sys.exit()`s on boot unless `INVENTREE_SITE_URL`
-  and `INVENTREE_TRUSTED_ORIGINS` are set.
-- The stock image CMD only starts gunicorn; it neither waits for the DB nor runs
-  migrations (offloaded to a django-q worker absent in a single web pod). The CMD
-  below waits for postgres, runs `invoke update` (migrate + collectstatic), then
-  serves.
-- Postgres uses POSTGRES_HOST_AUTH_METHOD=trust (no password) so the platform's
-  secret-redaction step has no POSTGRES_PASSWORD to rewrite into an
-  unprovisionable ${POSTGRES_PASSWORD}. Safe for test data.
+Fix: single self-contained pod backed by SQLite on the data volume (fine for
+test data) — same shape as other working single-pod apps, no companion DB pod.
+- `invoke update` runs migrations + collectstatic synchronously before gunicorn.
+- In production the server `sys.exit()`s without INVENTREE_SITE_URL /
+  INVENTREE_TRUSTED_ORIGINS — both set.
 
 ## Fixed Dockerfile
 ```dockerfile
 FROM mirror.gcr.io/inventree/inventree:stable
-CMD ["sh", "-c", "invoke wait && invoke update && exec gunicorn -c ./gunicorn.conf.py InvenTree.wsgi -b 0.0.0.0:8000 --chdir ${INVENTREE_BACKEND_DIR}/InvenTree"]
+CMD ["sh", "-c", "invoke update && exec gunicorn -c ./gunicorn.conf.py InvenTree.wsgi -b 0.0.0.0:8000 --chdir ${INVENTREE_BACKEND_DIR}/InvenTree"]
 EXPOSE 8000
 ```
 
@@ -35,11 +30,8 @@ application:
     servicePorts:
     - 8000
     vars:
-      INVENTREE_DB_ENGINE: postgresql
-      INVENTREE_DB_NAME: inventree
-      INVENTREE_DB_USER: inventree
-      INVENTREE_DB_HOST: inventree-postgres.pod
-      INVENTREE_DB_PORT: "5432"
+      INVENTREE_DB_ENGINE: sqlite3
+      INVENTREE_DB_NAME: /home/inventree/data/inventree.sqlite3
       INVENTREE_AUTO_UPDATE: "True"
       INVENTREE_SITE_URL: https://relaxed-weasel-inventree.cloud.nexlayer.ai
       INVENTREE_TRUSTED_ORIGINS: https://relaxed-weasel-inventree.cloud.nexlayer.ai
@@ -51,17 +43,5 @@ application:
     volumes:
     - name: inventree-data-v3
       mountPath: /home/inventree/data
-      size: 10Gi
-  - name: inventree-postgres
-    image: mirror.gcr.io/library/postgres:16-alpine
-    servicePorts:
-    - 5432
-    vars:
-      POSTGRES_DB: inventree
-      POSTGRES_USER: inventree
-      POSTGRES_HOST_AUTH_METHOD: trust
-    volumes:
-    - name: inventree-db-v3
-      mountPath: /var/lib/postgresql/data
       size: 10Gi
 ```
