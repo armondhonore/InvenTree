@@ -39,7 +39,7 @@ application:
   name: inventree
   pods:
   - name: app
-    image: "registry.nexlayer.io/user_01kece1xyh817dwff7wnarhkxd/inventree:19f15d9da09"
+    image: "registry.nexlayer.io/user_01kece1xyh817dwff7wnarhkxd/inventree:19f15e135c1"
     path: /
     servicePorts:
     - 8000
