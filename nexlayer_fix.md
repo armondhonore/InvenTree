@@ -1,23 +1,16 @@
 # Nexlayer fix — inventree (AUTHORITATIVE / PINNED)
 
-Root cause (confirmed from container logs): the pipeline built InvenTree FROM
-SOURCE (python:3.12-slim + pip) and that image was broken —
-`ModuleNotFoundError: No module named 'django'`. Building from source is
-unnecessary; the official `inventree/inventree` image is complete. Separately,
-the multi-pod postgres topology kept tripping the deploy step.
+Root cause (confirmed): The official `mirror.gcr.io/inventree/inventree:stable`
+image requires INVENTREE_SECRET_KEY (was missing) and a Postgres DB.
+The previous SQLite single-pod approach with CMD overrides failed — CMD
+overrides are stripped on the redeploy path, and `image: "# filled by
+pipeline"` has no image available on a yaml-only redeploy, causing
+"malformed yaml" errors.
 
-Fix: single self-contained pod backed by SQLite on the data volume (fine for
-test data) — same shape as other working single-pod apps, no companion DB pod.
-- `invoke update` runs migrations + collectstatic synchronously before gunicorn.
-- In production the server `sys.exit()`s without INVENTREE_SITE_URL /
-  INVENTREE_TRUSTED_ORIGINS — both set.
-
-## Fixed Dockerfile
-```dockerfile
-FROM mirror.gcr.io/inventree/inventree:stable
-CMD ["sh", "-c", "invoke update && exec gunicorn -c ./gunicorn.conf.py InvenTree.wsgi -b 0.0.0.0:8000 --chdir ${INVENTREE_BACKEND_DIR}/InvenTree"]
-EXPOSE 8000
-```
+Fix: Use the official image directly (no Dockerfile override needed) with an
+explicit Postgres companion pod. All required env vars set including
+INVENTREE_SECRET_KEY. INVENTREE_AUTO_UPDATE=True handles migrations via the
+image's own built-in entrypoint.
 
 ## Fixed nexlayer.yaml
 ```yaml
@@ -25,23 +18,42 @@ application:
   name: inventree
   pods:
   - name: app
-    image: "# filled by pipeline"
+    image: mirror.gcr.io/inventree/inventree:stable
     path: /
     servicePorts:
     - 8000
     vars:
-      INVENTREE_DB_ENGINE: sqlite3
-      INVENTREE_DB_NAME: /home/inventree/data/inventree.sqlite3
+      INVENTREE_DB_ENGINE: postgresql
+      INVENTREE_DB_NAME: inventree
+      INVENTREE_DB_USER: inventree
+      INVENTREE_DB_PASSWORD: inventree
+      INVENTREE_DB_HOST: inventree-postgres.pod
+      INVENTREE_DB_PORT: "5432"
       INVENTREE_AUTO_UPDATE: "True"
       INVENTREE_SITE_URL: https://relaxed-weasel-inventree.cloud.nexlayer.ai
       INVENTREE_TRUSTED_ORIGINS: https://relaxed-weasel-inventree.cloud.nexlayer.ai
       INVENTREE_ADMIN_USER: admin
+      INVENTREE_ADMIN_PASSWORD: inventree
       INVENTREE_ADMIN_EMAIL: admin@example.com
       INVENTREE_GUNICORN_TIMEOUT: "300"
+      INVENTREE_SECRET_KEY: nexlayer250appsInvenTreeSecretKey2026xKp9mZqRt
       INVENTREE_STATIC_ROOT: /home/inventree/data/static
       INVENTREE_MEDIA_ROOT: /home/inventree/data/media
     volumes:
     - name: inventree-data-v3
       mountPath: /home/inventree/data
+      size: 10Gi
+  - name: inventree-postgres
+    image: mirror.gcr.io/library/postgres:16-alpine
+    servicePorts:
+    - 5432
+    vars:
+      POSTGRES_DB: inventree
+      POSTGRES_USER: inventree
+      POSTGRES_PASSWORD: inventree
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+    - name: inventree-db-v3
+      mountPath: /var/lib/postgresql
       size: 10Gi
 ```
