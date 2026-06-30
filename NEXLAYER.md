@@ -38,36 +38,26 @@ The agent generates this; you can edit it freely.
 application:
   name: inventree
   pods:
-    - name: web
-      image: "registry.nexlayer.io/user_01kece1xyh817dwff7wnarhkxd/inventree:9f15757-fix8"
-      path: /
-      port: 8000
-      servicePorts:
-        - 8000
-      env:
-        - name: DATABASE_URL
-          value: postgresql://inventree:password@${postgres:5432}/inventree
-        - name: REDIS_URL
-          value: redis://${redis:6379}
-    - name: postgres
-      image: mirror.gcr.io/library/postgres:16-alpine
-      path: /postgres
-      port: 5432
-      servicePorts:
-        - 5432
-      env:
-        - name: POSTGRES_USER
-          value: inventree
-        - name: POSTGRES_PASSWORD
-          value: password
-        - name: POSTGRES_DB
-          value: inventree
-    - name: redis
-      image: mirror.gcr.io/library/redis:7-alpine
-      path: /redis
-      port: 6379
-      servicePorts:
-        - 6379
+  - name: app
+    image: "registry.nexlayer.io/user_01kece1xyh817dwff7wnarhkxd/inventree:19f15d9da09"
+    path: /
+    servicePorts:
+    - 8000
+    vars:
+      INVENTREE_DB_ENGINE: sqlite3
+      INVENTREE_DB_NAME: /home/inventree/data/inventree.sqlite3
+      INVENTREE_AUTO_UPDATE: "True"
+      INVENTREE_SITE_URL: https://relaxed-weasel-inventree.cloud.nexlayer.ai
+      INVENTREE_TRUSTED_ORIGINS: https://relaxed-weasel-inventree.cloud.nexlayer.ai
+      INVENTREE_ADMIN_USER: admin
+      INVENTREE_ADMIN_EMAIL: admin@example.com
+      INVENTREE_GUNICORN_TIMEOUT: "300"
+      INVENTREE_STATIC_ROOT: /home/inventree/data/static
+      INVENTREE_MEDIA_ROOT: /home/inventree/data/media
+    volumes:
+    - name: inventree-data-v3
+      mountPath: /home/inventree/data
+      size: 10Gi
 ```
 
 **Common edits:**

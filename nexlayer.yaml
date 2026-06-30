@@ -2,7 +2,7 @@ application:
   name: inventree
   pods:
   - name: app
-    image: "# filled by pipeline"
+    image: "registry.nexlayer.io/user_01kece1xyh817dwff7wnarhkxd/inventree:19f15d9da09"
     path: /
     servicePorts:
     - 8000
