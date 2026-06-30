@@ -1,32 +1,7 @@
-FROM mirror.gcr.io/library/python:3.12-slim
-
-WORKDIR /app
-
-# Install system dependencies for InvenTree (Postgres, build tools, etc.)
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    libpq-dev \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
-
-# Copy the entire repository
-COPY . .
-
-# Install dependencies using the project's pyproject.toml/requirements
-# We use --no-deps first to get pip updated, then install the project
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir . || pip install --no-cache-dir -r requirements.txt || true
-
-# Ensure Django and core production server are present
-RUN pip install --no-cache-dir "django>=5.0" gunicorn psycopg2-binary redis
-
-# InvenTree uses a src layout. Add src to PYTHONPATH
-ENV PYTHONPATH=/app/src
-ENV SECRET_KEY=placeholder-secret-key-for-build
-ENV DEBUG=False
-ENV PORT=8000
-
+# Thin wrapper over the official InvenTree image — no source rebuild.
+# (A from-source build fails: ModuleNotFoundError: No module named 'django'.)
+FROM mirror.gcr.io/inventree/inventree:stable
+# init.sh (the image ENTRYPOINT) runs first, then exec's this CMD.
+# Wait for the DB, run migrations + collect static synchronously, then serve.
+CMD ["sh", "-c", "invoke wait && invoke update && exec gunicorn -c ./gunicorn.conf.py InvenTree.wsgi -b 0.0.0.0:8000 --chdir ${INVENTREE_BACKEND_DIR}/InvenTree"]
 EXPOSE 8000
-
-# Use a more robust entrypoint: find manage.py, run migrations (ignore failure), then runserver
-CMD ["sh", "-c", "MANAGE_PY=$(find . -name manage.py | head -n 1) && python $MANAGE_PY migrate --noinput || true && python $MANAGE_PY runserver 0.0.0.0:8000"]

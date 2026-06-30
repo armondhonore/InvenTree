@@ -1,20 +1,67 @@
-# Nexlayer fix guidance — inventree (PINNED)
+# Nexlayer fix — inventree (AUTHORITATIVE / PINNED)
 
-Do NOT regenerate the Dockerfile or nexlayer.yaml. They are hand-tuned and correct.
+Root cause (confirmed from container logs): the pipeline built InvenTree FROM
+SOURCE (python:3.12-slim + pip) and that image was broken —
+`ModuleNotFoundError: No module named 'django'` at /app/src/backend/InvenTree/manage.py.
+Building from source is unnecessary; the official `inventree/inventree` image is
+complete.
 
-## Root cause of prior failures
-The stock `inventree/inventree` image CMD only starts gunicorn. It does NOT wait
-for postgres and does NOT run migrations (InvenTree offloads migrations to a
-django-q worker that is absent in a single web pod). Result: the web process
-raced postgres and/or served on an unmigrated DB → crash loop → HTTP 503.
+Facts that must hold (verified in InvenTree source):
+- In production the server `sys.exit()`s on boot unless `INVENTREE_SITE_URL`
+  and `INVENTREE_TRUSTED_ORIGINS` are set.
+- The stock image CMD only starts gunicorn; it neither waits for the DB nor runs
+  migrations (offloaded to a django-q worker absent in a single web pod). The CMD
+  below waits for postgres, runs `invoke update` (migrate + collectstatic), then
+  serves.
+- Postgres uses POSTGRES_HOST_AUTH_METHOD=trust (no password) so the platform's
+  secret-redaction step has no POSTGRES_PASSWORD to rewrite into an
+  unprovisionable ${POSTGRES_PASSWORD}. Safe for test data.
 
-## The fix (already applied — keep as-is)
-- Root `Dockerfile` extends `mirror.gcr.io/inventree/inventree:stable` and sets a
-  CMD that runs `invoke wait && invoke update && gunicorn ...` so the DB is
-  reachable and migrated before serving.
-- `nexlayer.yaml`: app pod on :8000 + a dedicated `inventree-postgres` pod.
-  Required env: INVENTREE_SITE_URL and INVENTREE_TRUSTED_ORIGINS (the prod
-  server calls sys.exit() without them), INVENTREE_DB_* pointing at
-  inventree-postgres.pod:5432, admin bootstrap vars.
+## Fixed Dockerfile
+```dockerfile
+FROM mirror.gcr.io/inventree/inventree:stable
+CMD ["sh", "-c", "invoke wait && invoke update && exec gunicorn -c ./gunicorn.conf.py InvenTree.wsgi -b 0.0.0.0:8000 --chdir ${INVENTREE_BACKEND_DIR}/InvenTree"]
+EXPOSE 8000
+```
 
-Pinned=true. Do not rewrite these files.
+## Fixed nexlayer.yaml
+```yaml
+application:
+  name: inventree
+  pods:
+  - name: app
+    image: "# filled by pipeline"
+    path: /
+    servicePorts:
+    - 8000
+    vars:
+      INVENTREE_DB_ENGINE: postgresql
+      INVENTREE_DB_NAME: inventree
+      INVENTREE_DB_USER: inventree
+      INVENTREE_DB_HOST: inventree-postgres.pod
+      INVENTREE_DB_PORT: "5432"
+      INVENTREE_AUTO_UPDATE: "True"
+      INVENTREE_SITE_URL: https://relaxed-weasel-inventree.cloud.nexlayer.ai
+      INVENTREE_TRUSTED_ORIGINS: https://relaxed-weasel-inventree.cloud.nexlayer.ai
+      INVENTREE_ADMIN_USER: admin
+      INVENTREE_ADMIN_EMAIL: admin@example.com
+      INVENTREE_GUNICORN_TIMEOUT: "300"
+      INVENTREE_STATIC_ROOT: /home/inventree/data/static
+      INVENTREE_MEDIA_ROOT: /home/inventree/data/media
+    volumes:
+    - name: inventree-data-v3
+      mountPath: /home/inventree/data
+      size: 10Gi
+  - name: inventree-postgres
+    image: mirror.gcr.io/library/postgres:16-alpine
+    servicePorts:
+    - 5432
+    vars:
+      POSTGRES_DB: inventree
+      POSTGRES_USER: inventree
+      POSTGRES_HOST_AUTH_METHOD: trust
+    volumes:
+    - name: inventree-db-v3
+      mountPath: /var/lib/postgresql/data
+      size: 10Gi
+```
